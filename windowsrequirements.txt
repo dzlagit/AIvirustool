@@ -7,7 +7,7 @@ click==8.1.6
 colorama==0.4.6
 configobj==5.0.8
 cryptography==41.0.7
-defer==1.0.6
+defer==1.0.4
 deprecation==2.0.7
 distro==1.9.0
 eyed3==0.9.7
@@ -20,7 +20,7 @@ idna==3.6
 ifaddr==0.2.0
 IMDbPY==2021.4.18
 lxml==5.2.1
-Mako==1.3.2.dev0
+Mako==1.3.2
 Markdown==3.5.2
 markdown-it-py==3.0.0
 MarkupSafe==2.1.5
@@ -35,7 +35,7 @@ pillow==10.2.0
 psutil==5.9.8
 ptyprocess==0.7.0
 pyasyncore==1.0.2
-PyBluez==0.23
+pybluez2==0.46
 pycryptodomex==3.20.0
 pycurl==7.45.3
 pyelftools==0.30
