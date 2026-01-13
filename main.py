@@ -1,18 +1,230 @@
+import argparse
+import json
+import os
+import warnings
+import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.preprocessing import LabelEncoder
+import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
-import xgboost as xgb
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.preprocessing import LabelEncoder
 
-def loadAndClean(filepath: str) -> pd.dataFrame:
-    df = pd.read_csv('data.csv')
+warnings.filterwarnings("ignore")
 
-    df = df[df['Time'] >= 0]
-    df = df[df['ExpAddress'] != '1']
-    df.rename(columns={'Protcol': 'Protocol'}, inplace=True)
+def ensure_dirs():
+    os.makedirs("outputs/plots", exist_ok=True)
 
-    df.reset_index(drop=True, inplace=True)
 
-    
+def save_json(obj, path):
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=4)
 
+def load_and_clean_data(path):
+    df = pd.read_csv(path)
+    df = df.drop_duplicates()
+    label_encoders = {}
+    for col in df.select_dtypes(include="object").columns:
+        le = LabelEncoder()
+        df[col] = le.fit_transform(df[col].astype(str))
+        label_encoders[col] = le
+
+    return df, label_encoders
+
+def plot_class_distribution(df, target):
+    plt.figure(figsize=(8, 5))
+    sns.countplot(x=target, data=df)
+    plt.title("Class Distribution")
+    plt.tight_layout()
+    plt.savefig("outputs/plots/class_distribution.png")
+    plt.close()
+
+def train_random_forest(X_train, y_train, X_test, y_test):
+    model = RandomForestClassifier(
+        n_estimators=200,
+        random_state=42, # this is a fixed random_state values, which used throughout to ensure reproducibility
+        n_jobs=-1
+    )
+    model.fit(X_train, y_train)
+
+    preds = model.predict(X_test)
+    acc = accuracy_score(y_test, preds)
+
+    return model, acc, classification_report(y_test, preds, output_dict=True)
+
+
+def save_feature_importance(model, X, top_n=30):
+    importances = pd.DataFrame({
+        "feature": X.columns,
+        "importance": model.feature_importances_
+    }).sort_values(by="importance", ascending=False)
+
+    importances.head(top_n).to_csv(
+        "outputs/feature_importance.csv",
+        index=False
+    )
+
+def semi_supervised_learning(X, y):
+    X_labeled, X_unlabeled, y_labeled, _ = train_test_split(
+        X, y, test_size=0.3, random_state=42
+    )
+
+    model = RandomForestClassifier(
+        n_estimators=200,
+        random_state=42,
+        n_jobs=-1
+    )
+    model.fit(X_labeled, y_labeled)
+
+    pseudo_labels = model.predict(X_unlabeled)
+
+    X_combined = pd.concat([X_labeled, X_unlabeled])
+    y_combined = pd.concat([y_labeled, pd.Series(pseudo_labels)])
+
+    model.fit(X_combined, y_combined)
+
+    return model
+
+def run_xgboost(X_train, y_train, X_test, y_test, tune=False):
+    try:
+        from xgboost import XGBClassifier
+    except ImportError:
+        print("XGBoost not installed — skipping.")
+        return None, None, None
+
+    if tune:
+        param_grid = {
+            "n_estimators": [100, 200],
+            "max_depth": [3, 5],
+            "learning_rate": [0.05, 0.1]
+        }
+        base = XGBClassifier(
+            random_state=42,
+            eval_metric="logloss"
+        )
+        grid = GridSearchCV(
+            base,
+            param_grid,
+            cv=3,
+            scoring="accuracy",
+            n_jobs=-1
+        )
+        grid.fit(X_train, y_train)
+        model = grid.best_estimator_
+        best_params = grid.best_params_
+        save_json(best_params, "outputs/xgboost_best_params.json")
+    else:
+        model = XGBClassifier(
+            n_estimators=200,
+            random_state=42,
+            eval_metric="logloss"
+        )
+        model.fit(X_train, y_train)
+        best_params = None
+
+    preds = model.predict(X_test)
+    acc = accuracy_score(y_test, preds)
+
+    return model, acc, best_params
+
+def main(args):
+    ensure_dirs()
+
+    df, _ = load_and_clean_data(args.data_path)
+
+    target_col = df.columns[-1]
+    X = df.drop(columns=[target_col])
+    y = df[target_col]
+
+    if args.save_plots:
+        plot_class_distribution(df, target_col)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    results = {}
+
+    rf_model, rf_acc, rf_report = train_random_forest(
+        X_train, y_train, X_test, y_test
+    )
+    results["random_forest_accuracy"] = rf_acc
+
+    if args.save_feature_importance:
+        save_feature_importance(rf_model, X)
+
+    if args.run_semi_supervised:
+        semi_model = semi_supervised_learning(X, y)
+        semi_preds = semi_model.predict(X_test)
+        semi_acc = accuracy_score(y_test, semi_preds)
+        results["semi_supervised_accuracy"] = semi_acc
+
+    if args.run_no_financials:
+        non_financial_cols = [
+            c for c in X.columns if "amount" not in c.lower()
+        ]
+        X_nf = X[non_financial_cols]
+
+        X_train_nf, X_test_nf, y_train_nf, y_test_nf = train_test_split(
+            X_nf, y, test_size=0.2, random_state=42
+        )
+
+        _, acc_nf, _ = train_random_forest(
+            X_train_nf, y_train_nf, X_test_nf, y_test_nf
+        )
+        results["no_financial_features_accuracy"] = acc_nf
+
+    if args.run_xgboost:
+        _, xgb_acc, _ = run_xgboost(
+            X_train, y_train, X_test, y_test,
+            tune=args.tune_xgboost
+        )
+        results["xgboost_accuracy"] = xgb_acc
+
+    save_json(results, "outputs/run_summary.json")
+
+    print("Run complete. Results:")
+    for k, v in results.items():
+        print(f"{k}: {v:.4f}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="UGRansomware ML pipeline"
+    )
+    parser.add_argument(
+        "--data-path",
+        default="data/data.csv",
+        help="Path to dataset CSV"
+    )
+    parser.add_argument(
+        "--save-plots",
+        action="store_true",
+        help="Save EDA plots"
+    )
+    parser.add_argument(
+        "--save-feature-importance",
+        action="store_true",
+        help="Save feature importance CSV"
+    )
+    parser.add_argument(
+        "--run-semi-supervised",
+        action="store_true",
+        help="Run semi-supervised experiment"
+    )
+    parser.add_argument(
+        "--run-no-financials",
+        action="store_true",
+        help="Run no-financial-features ablation"
+    )
+    parser.add_argument(
+        "--run-xgboost",
+        action="store_true",
+        help="Run XGBoost model"
+    )
+    parser.add_argument(
+        "--tune-xgboost",
+        action="store_true",
+        help="Grid search XGBoost"
+    )
+
+    main(parser.parse_args())

@@ -1,0 +1,6 @@
+{
+    "random_forest_accuracy": 0.9938944614042738,
+    "semi_supervised_accuracy": 0.994196383642524,
+    "no_financial_features_accuracy": 0.9938944614042738,
+    "xgboost_accuracy": 0.9935589922506626
+}
