@@ -1,6 +1,26 @@
 {
-    "random_forest_accuracy": 0.9938944614042738,
-    "semi_supervised_accuracy": 0.994196383642524,
-    "no_financial_features_accuracy": 0.9938944614042738,
-    "xgboost_accuracy": 0.9935589922506626
+    "random_forest": {
+        "accuracy": 0.9938944614042738,
+        "precision": 0.9938949254320419,
+        "recall": 0.9938944614042738,
+        "f1_score": 0.9938941631992716
+    },
+    "semi_supervised_random_forest": {
+        "accuracy": 0.994196383642524,
+        "precision": 0.9941972445105796,
+        "recall": 0.994196383642524,
+        "f1_score": 0.994196125579312
+    },
+    "no_financial_features_random_forest": {
+        "accuracy": 0.9919151933979671,
+        "precision": 0.9919165450219135,
+        "recall": 0.9919151933979671,
+        "f1_score": 0.9919155396441712
+    },
+    "xgboost": {
+        "accuracy": 0.9935589922506626,
+        "precision": 0.9935613568561884,
+        "recall": 0.9935589922506626,
+        "f1_score": 0.9935590031032229
+    }
 }
