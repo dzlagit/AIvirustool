@@ -60,11 +60,6 @@ def _is_binary(y):
 
 
 def compute_metrics(y_true, y_pred):
-    """
-    Returns a compact metrics dict you can use in JSON + reporting.
-    - If binary: precision/recall/f1 are computed with average='binary'
-    - Else: uses weighted average (safe default for imbalance)
-    """
     binary = _is_binary(y_true)
     avg = "binary" if binary else "weighted"
 
@@ -73,7 +68,6 @@ def compute_metrics(y_true, y_pred):
         "precision": float(precision_score(y_true, y_pred, average=avg, zero_division=0)),
         "recall": float(recall_score(y_true, y_pred, average=avg, zero_division=0)),
         "f1_score": float(f1_score(y_true, y_pred, average=avg, zero_division=0)),
-        # Keep these for completeness / write-up (you can cite class-wise results)
         "classification_report": classification_report(y_true, y_pred, output_dict=True, zero_division=0),
         "confusion_matrix": confusion_matrix(y_true, y_pred).tolist(),
     }
@@ -103,7 +97,6 @@ def save_feature_importance(model, X, top_n=30):
 
 
 def semi_supervised_learning(X, y):
-    # Create partially-unlabelled scenario (by splitting and pseudo-labelling)
     X_labeled, X_unlabeled, y_labeled, _ = train_test_split(
         X, y, test_size=0.3, random_state=42
     )
@@ -174,7 +167,6 @@ def main(args):
 
     results = {}
 
-    # Random Forest (baseline)
     rf_model, rf_metrics = train_random_forest(X_train, y_train, X_test, y_test)
     results["random_forest"] = {
         "accuracy": rf_metrics["accuracy"],
@@ -186,7 +178,6 @@ def main(args):
     if args.save_feature_importance:
         save_feature_importance(rf_model, X)
 
-    # Semi-supervised (self-training via pseudo-labelling)
     if args.run_semi_supervised:
         semi_model = semi_supervised_learning(X, y)
         semi_preds = semi_model.predict(X_test)
@@ -198,9 +189,7 @@ def main(args):
             "f1_score": semi_metrics["f1_score"],
         }
 
-    # No-financial-features ablation
     if args.run_no_financials:
-        # Your dataset uses columns like USD/BTC; also keep "amount" just in case
         blocked_tokens = ("usd", "btc", "amount", "value", "price")
         non_financial_cols = [c for c in X.columns if not any(t in c.lower() for t in blocked_tokens)]
         X_nf = X[non_financial_cols]
@@ -267,5 +256,5 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tune-xgboost", action="store_true", help="Grid search XGBoost"
     )
-
+    
     main(parser.parse_args())
